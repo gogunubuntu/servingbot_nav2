@@ -29,7 +29,7 @@ def generate_launch_description():
     param_dir = LaunchConfiguration(
         "params_file",
         default=os.path.join(
-            get_package_share_directory("carter_navigation"), "params", "carter_rl_navigation_params.yaml"
+            get_package_share_directory("carter_navigation"), "params", "serving_rl_navigation_params.yaml"
         ),
     )
     nav2_bringup_launch_dir = os.path.join(get_package_share_directory("nav2_bringup"), "launch")
