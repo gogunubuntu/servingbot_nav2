@@ -29,7 +29,7 @@ def generate_launch_description():
     param_dir = LaunchConfiguration(
         "params_file",
         default=os.path.join(
-            get_package_share_directory("carter_navigation"), "params", "carter_purepursuit_navigation_params.yaml"
+            get_package_share_directory("carter_navigation"), "params", "serving_purepursuit_navigation_params.yaml"
         ),
     )
 
