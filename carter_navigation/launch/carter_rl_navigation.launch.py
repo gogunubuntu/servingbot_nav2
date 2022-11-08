@@ -32,8 +32,8 @@ def generate_launch_description():
             get_package_share_directory("carter_navigation"), "params", "carter_rl_navigation_params.yaml"
         ),
     )
-
     nav2_bringup_launch_dir = os.path.join(get_package_share_directory("nav2_bringup"), "launch")
+    four_cam_directly_launch_dir = os.path.join(get_package_share_directory("usb_camera_driver"), "launch")
 
     rviz_config_dir = os.path.join(get_package_share_directory("carter_navigation"), "rviz2", "carter_navigation.rviz")
 
@@ -53,6 +53,9 @@ def generate_launch_description():
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource([nav2_bringup_launch_dir, "/bringup_launch.py"]),
                 launch_arguments={"map": map_dir, "use_sim_time": use_sim_time, "params_file": param_dir}.items(),
+            ),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource([four_cam_directly_launch_dir, "/4cam_directly.launch.py"])
             ),
         ]
     )
