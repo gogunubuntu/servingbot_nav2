@@ -39,6 +39,7 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
+            Node(package="serving_utils", executable="stopper"),
             DeclareLaunchArgument("map", default_value=map_dir, description="Full path to map file to load"),
             DeclareLaunchArgument(
                 "params_file", default_value=param_dir, description="Full path to param file to load"

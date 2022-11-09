@@ -39,6 +39,7 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
+            Node(package="serving_utils", executable="stopper"),
             DeclareLaunchArgument("map", default_value=map_dir, description="Full path to map file to load"),
             DeclareLaunchArgument(
                 "params_file", default_value=param_dir, description="Full path to param file to load"
@@ -54,6 +55,7 @@ def generate_launch_description():
                 PythonLaunchDescriptionSource([nav2_bringup_launch_dir, "/bringup_launch.py"]),
                 launch_arguments={"map": map_dir, "use_sim_time": use_sim_time, "params_file": param_dir}.items(),
             ),
+
             # IncludeLaunchDescription(
             #     PythonLaunchDescriptionSource([four_cam_directly_launch_dir, "/4cam_directly.launch.py"])
             # ),
