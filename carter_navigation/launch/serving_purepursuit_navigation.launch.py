@@ -22,7 +22,7 @@ def generate_launch_description():
     map_dir = LaunchConfiguration(
         "map",
         default=os.path.join(
-            get_package_share_directory("carter_navigation"), "maps", "carter_warehouse_navigation.yaml"
+            get_package_share_directory("carter_navigation"), "maps", "map_f1.yaml"
         ),
     )
 
