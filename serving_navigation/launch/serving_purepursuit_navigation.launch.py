@@ -21,9 +21,10 @@ def generate_launch_description():
 
     map_dir = LaunchConfiguration(
         "map",
-        default=os.path.join(
-            get_package_share_directory("serving_navigation"), "maps", "map_f1.yaml"
-        ),
+        # default=os.path.join(
+        #     get_package_share_directory("serving_navigation"), "maps", "map_f1.yaml"
+        # ),
+        default = "/home/nscl2004/new_map.yaml"
     )
 
     param_dir = LaunchConfiguration(

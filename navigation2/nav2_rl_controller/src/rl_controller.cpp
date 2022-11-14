@@ -271,9 +271,11 @@ geometry_msgs::msg::TwistStamped RLController::computeVelocityCommands(
   }
 
   // Collision checking on this velocity heading
-  if (isCollisionImminent(pose, linear_vel, angular_vel)) {
-    throw nav2_core::PlannerException("RegulatedPurePursuitController detected collision ahead!");
-  }
+  // if (isCollisionImminent(pose, linear_vel, angular_vel)) {
+    // RCLCPP_ERROR(logger_, "ignore collision",);
+    //throw nav2_core::PlannerException("RegulatedPurePursuitController detected collision ahead!");
+
+  //}
 
   // populate and return message
   geometry_msgs::msg::TwistStamped cmd_vel;
