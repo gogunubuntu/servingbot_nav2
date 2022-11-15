@@ -220,6 +220,7 @@ protected:
 
   double desired_linear_vel_;
   double lookahead_dist_;
+  double rl_lookahead_dist_;
   double rotate_to_heading_angular_vel_;
   double max_lookahead_dist_;
   double min_lookahead_dist_;
@@ -247,7 +248,6 @@ protected:
   std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<geometry_msgs::msg::PointStamped>> carrot_pub_;
   std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Path>> carrot_arc_pub_;
   std::shared_ptr<rclcpp::Client<rl_controller_msgs::srv::CalcRlVel>> calc_rl_vel_cli_;
-
 };
 
 }  // namespace nav2_regulated_pure_pursuit_controller

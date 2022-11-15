@@ -80,6 +80,8 @@ void RLController::configure(
   declare_parameter_if_not_declared(
     node, plugin_name_ + ".lookahead_dist", rclcpp::ParameterValue(0.6));
   declare_parameter_if_not_declared(
+    node, plugin_name_ + ".rl_lookahead_dist", rclcpp::ParameterValue(3.0));
+  declare_parameter_if_not_declared(
     node, plugin_name_ + ".min_lookahead_dist", rclcpp::ParameterValue(0.3));
   declare_parameter_if_not_declared(
     node, plugin_name_ + ".max_lookahead_dist", rclcpp::ParameterValue(0.9));
@@ -123,6 +125,7 @@ void RLController::configure(
 
   node->get_parameter(plugin_name_ + ".desired_linear_vel", desired_linear_vel_);
   node->get_parameter(plugin_name_ + ".lookahead_dist", lookahead_dist_);
+  node->get_parameter(plugin_name_ + ".rl_lookahead_dist", rl_lookahead_dist_);
   node->get_parameter(plugin_name_ + ".min_lookahead_dist", min_lookahead_dist_);
   node->get_parameter(plugin_name_ + ".max_lookahead_dist", max_lookahead_dist_);
   node->get_parameter(plugin_name_ + ".lookahead_time", lookahead_time_);
@@ -159,6 +162,7 @@ void RLController::configure(
   carrot_pub_ = node->create_publisher<geometry_msgs::msg::PointStamped>("lookahead_point", 1);
   carrot_arc_pub_ = node->create_publisher<nav_msgs::msg::Path>("lookahead_collision_arc", 1);
   calc_rl_vel_cli_ = node->create_client<rl_controller_msgs::srv::CalcRlVel>("calc_rl_vel");
+  
   while (!calc_rl_vel_cli_->wait_for_service(std::chrono::duration<long double, std::milli>(1000))){
     RCLCPP_INFO(logger_, "wait for service \n");
   }
@@ -208,6 +212,7 @@ std::unique_ptr<geometry_msgs::msg::PointStamped> RLController::createCarrotMsg(
   carrot_msg->point.x = carrot_pose.pose.position.x;
   carrot_msg->point.y = carrot_pose.pose.position.y;
   carrot_msg->point.z = 0.01;  // publish right over map to stand out
+  // RCLCPP_INFO(logger_, "lookahead point: %f, %f", carrot_pose.pose.position.x, carrot_pose.pose.position.y);
   return carrot_msg;
 }
 
@@ -228,48 +233,69 @@ geometry_msgs::msg::TwistStamped RLController::computeVelocityCommands(
   const geometry_msgs::msg::PoseStamped & pose,
   const geometry_msgs::msg::Twist & speed)
 {
-
   // Transform path to robot base frame
   auto transformed_plan = transformGlobalPlan(pose);
 
   // Find look ahead distance and point on path and publish
   const double lookahead_dist = getLookAheadDistance(speed);
-  auto carrot_pose = getLookAheadPoint(lookahead_dist, transformed_plan);
+  geometry_msgs::msg::PoseStamped carrot_pose = getLookAheadPoint(lookahead_dist, transformed_plan);
+  geometry_msgs::msg::PoseStamped rl_carrot_pose = getLookAheadPoint(rl_lookahead_dist_, transformed_plan);
+  // RCLCPP_INFO(logger_, "rl lookahead point: %f, %f", rl_carrot_pose.pose.position.x, rl_carrot_pose.pose.position.y);
+  // RCLCPP_INFO(logger_, "angle to rl lookahead point: %f", atan2(rl_carrot_pose.pose.position.y, rl_carrot_pose.pose.position.x));
+
   carrot_pub_->publish(createCarrotMsg(carrot_pose));
 
-  double linear_vel, angular_vel;
+  double linear_vel, angular_vel; 
 
   // Find distance^2 to look ahead point (carrot) in robot base frame
   // This is the chord length of the circle
-  const double carrot_dist2 =
-    (carrot_pose.pose.position.x * carrot_pose.pose.position.x) +
-    (carrot_pose.pose.position.y * carrot_pose.pose.position.y);
+  // const double carrot_dist2 =
+  //   (carrot_pose.pose.position.x * carrot_pose.pose.position.x) +
+  //   (carrot_pose.pose.position.y * carrot_pose.pose.position.y);
 
   // Find curvature of circle (k = 1 / R)
-  double curvature = 0.0;
-  if (carrot_dist2 > 0.001) {
-    curvature = 2.0 * carrot_pose.pose.position.y / carrot_dist2;
-  }
+  // double curvature = 0.0;
+  // if (carrot_dist2 > 0.001) {
+  //   curvature = 2.0 * carrot_pose.pose.position.y / carrot_dist2;
+  // }
 
   linear_vel = desired_linear_vel_;
 
   // Make sure we're in compliance with basic constraints
   double angle_to_heading;
+  // RCLCPP_INFO(logger_, "angle to goal: %f", tf2::getYaw(transformed_plan.poses.back().pose.orientation));
+  // RCLCPP_INFO(logger_, "robot_angle: %f", tf2::getYaw(pose.pose.orientation));
+  
   if (shouldRotateToGoalHeading(carrot_pose)) {
     double angle_to_goal = tf2::getYaw(transformed_plan.poses.back().pose.orientation);
     rotateToHeading(linear_vel, angular_vel, angle_to_goal, speed);
+    RCLCPP_INFO(logger_, "compute vel from pure pursuit controller");
   } else if (shouldRotateToPath(carrot_pose, angle_to_heading)) {
     rotateToHeading(linear_vel, angular_vel, angle_to_heading, speed);
+    RCLCPP_INFO(logger_, "compute vel from pure pursuit controller");
   } else {
-    applyConstraints(
-      fabs(lookahead_dist - sqrt(carrot_dist2)),
-      lookahead_dist, curvature, speed,
-      costAtPose(pose.pose.position.x, pose.pose.position.y), linear_vel);
+    // applyConstraints(
+    //   fabs(lookahead_dist - sqrt(carrot_dist2)),
+    //   lookahead_dist, curvature, speed,
+    //   costAtPose(pose.pose.position.x, pose.pose.position.y), linear_vel);
 
-      // Apply curvature to angular velocity after constraining linear velocity
-      angular_vel = linear_vel * curvature;
+    //   // Apply curvature to angular velocity after constraining linear velocity
+    //   angular_vel = linear_vel * curvature;
+    auto request = std::make_shared<rl_controller_msgs::srv::CalcRlVel::Request>();
+    request->dist2lookahead = std::hypot(rl_carrot_pose.pose.position.x, rl_carrot_pose.pose.position.y);
+    request->dir2lookahead = atan2(rl_carrot_pose.pose.position.y, rl_carrot_pose.pose.position.x);
+    request->robot_v = speed.linear.x;
+    request->robot_w = speed.angular.z;
+    auto result = calc_rl_vel_cli_->async_send_request(request);
+    RCLCPP_INFO(logger_, "compute vel from DRL controller");
+    while (true){
+      if (result.get()->success == true) {
+        linear_vel = result.get()->v;
+        angular_vel = result.get()->w;
+        break;
+      }
   }
-
+  }
   // Collision checking on this velocity heading
   // if (isCollisionImminent(pose, linear_vel, angular_vel)) {
     // RCLCPP_ERROR(logger_, "ignore collision",);
@@ -280,22 +306,9 @@ geometry_msgs::msg::TwistStamped RLController::computeVelocityCommands(
   // populate and return message
   geometry_msgs::msg::TwistStamped cmd_vel;
   cmd_vel.header = pose.header;
+  cmd_vel.twist.linear.x = linear_vel;
+  cmd_vel.twist.angular.z = angular_vel;
 
-  auto request = std::make_shared<rl_controller_msgs::srv::CalcRlVel::Request>();
-  auto result = calc_rl_vel_cli_->async_send_request(request);
-  while (true){
-    if (result.get()->success == true) {
-      cmd_vel.twist.linear.x = result.get()->v;
-      cmd_vel.twist.angular.z = result.get()->w;
-      break;
-      }
-    else {
-      cmd_vel.twist.linear.x = linear_vel;
-      cmd_vel.twist.angular.z = angular_vel;
-      break;
-    }
-
-  }
   return cmd_vel;
   
 }
@@ -333,7 +346,8 @@ void RLController::rotateToHeading(
 
 geometry_msgs::msg::PoseStamped RLController::getLookAheadPoint(
   const double & lookahead_dist,
-  const nav_msgs::msg::Path & transformed_plan)
+  const nav_msgs::msg::Path & transformed_plan
+  )
 {
   // Find the first pose which is at a distance greater than the lookahead distance
   auto goal_pose_it = std::find_if(
@@ -492,6 +506,8 @@ void RLController::setPlan(const nav_msgs::msg::Path & path)
 nav_msgs::msg::Path RLController::transformGlobalPlan(
   const geometry_msgs::msg::PoseStamped & pose)
 {
+  // RCLCPP_INFO(logger_, "global plan length: %d", global_plan_.poses.size());
+  // RCLCPP_INFO(logger_, "global plan last point norm: %f", std::hypot(global_plan_.poses.back().pose.position.x, global_plan_.poses.back().pose.position.y));
   if (global_plan_.poses.empty()) {
     throw nav2_core::PlannerException("Received plan with zero length");
   }
@@ -550,6 +566,8 @@ nav_msgs::msg::Path RLController::transformGlobalPlan(
   if (transformed_plan.poses.empty()) {
     throw nav2_core::PlannerException("Resulting plan has 0 poses in it.");
   }
+  // RCLCPP_INFO(logger_, "transformed plan length: %d", transformed_plan.poses.size());
+  // RCLCPP_INFO(logger_, "transformed plan last point norm: %f", std::hypot(transformed_plan.poses.back().pose.position.x, transformed_plan.poses.back().pose.position.y));
 
   return transformed_plan;
 }
