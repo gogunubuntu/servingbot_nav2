@@ -124,6 +124,7 @@ controller_server:
       cost_scaling_dist: 0.3
       cost_scaling_gain: 1.0
       inflation_cost_scaling_factor: 3.0
+      rotate_to_heading_angular_vel: 0.5
 
 controller_server_rclcpp_node:
   ros__parameters:
