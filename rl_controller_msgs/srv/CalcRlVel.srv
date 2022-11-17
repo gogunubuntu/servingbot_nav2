@@ -2,6 +2,7 @@ float64 dist2lookahead
 float64 dir2lookahead
 float64 robot_v
 float64 robot_w
+float64 path_length
 ---
 float64 v
 float64 w

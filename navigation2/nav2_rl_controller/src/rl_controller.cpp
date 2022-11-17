@@ -235,6 +235,7 @@ geometry_msgs::msg::TwistStamped RLController::computeVelocityCommands(
 {
   // Transform path to robot base frame
   auto transformed_plan = transformGlobalPlan(pose);
+  path_length_ = std::min(getPathLength(global_plan_), 5.0);
 
   // Find look ahead distance and point on path and publish
   const double lookahead_dist = getLookAheadDistance(speed);
@@ -247,24 +248,9 @@ geometry_msgs::msg::TwistStamped RLController::computeVelocityCommands(
 
   double linear_vel, angular_vel; 
 
-  // Find distance^2 to look ahead point (carrot) in robot base frame
-  // This is the chord length of the circle
-  // const double carrot_dist2 =
-  //   (carrot_pose.pose.position.x * carrot_pose.pose.position.x) +
-  //   (carrot_pose.pose.position.y * carrot_pose.pose.position.y);
-
-  // Find curvature of circle (k = 1 / R)
-  // double curvature = 0.0;
-  // if (carrot_dist2 > 0.001) {
-  //   curvature = 2.0 * carrot_pose.pose.position.y / carrot_dist2;
-  // }
-
   linear_vel = desired_linear_vel_;
 
-  // Make sure we're in compliance with basic constraints
   double angle_to_heading;
-  // RCLCPP_INFO(logger_, "angle to goal: %f", tf2::getYaw(transformed_plan.poses.back().pose.orientation));
-  // RCLCPP_INFO(logger_, "robot_angle: %f", tf2::getYaw(pose.pose.orientation));
   
   if (shouldRotateToGoalHeading(carrot_pose)) {
     double angle_to_goal = tf2::getYaw(transformed_plan.poses.back().pose.orientation);
@@ -274,18 +260,12 @@ geometry_msgs::msg::TwistStamped RLController::computeVelocityCommands(
     rotateToHeading(linear_vel, angular_vel, angle_to_heading, speed);
     RCLCPP_INFO(logger_, "compute vel from pure pursuit controller");
   } else {
-    // applyConstraints(
-    //   fabs(lookahead_dist - sqrt(carrot_dist2)),
-    //   lookahead_dist, curvature, speed,
-    //   costAtPose(pose.pose.position.x, pose.pose.position.y), linear_vel);
-
-    //   // Apply curvature to angular velocity after constraining linear velocity
-    //   angular_vel = linear_vel * curvature;
     auto request = std::make_shared<rl_controller_msgs::srv::CalcRlVel::Request>();
     request->dist2lookahead = std::hypot(rl_carrot_pose.pose.position.x, rl_carrot_pose.pose.position.y);
     request->dir2lookahead = atan2(rl_carrot_pose.pose.position.y, rl_carrot_pose.pose.position.x);
     request->robot_v = speed.linear.x;
     request->robot_w = speed.angular.z;
+    request->path_length = path_length_;
     auto result = calc_rl_vel_cli_->async_send_request(request);
     RCLCPP_INFO(logger_, "compute vel from DRL controller");
     while (true){
@@ -294,16 +274,8 @@ geometry_msgs::msg::TwistStamped RLController::computeVelocityCommands(
         angular_vel = result.get()->w;
         break;
       }
+    }
   }
-  }
-  // Collision checking on this velocity heading
-  // if (isCollisionImminent(pose, linear_vel, angular_vel)) {
-    // RCLCPP_ERROR(logger_, "ignore collision",);
-    //throw nav2_core::PlannerException("RegulatedPurePursuitController detected collision ahead!");
-
-  //}
-
-  // populate and return message
   geometry_msgs::msg::TwistStamped cmd_vel;
   cmd_vel.header = pose.header;
   cmd_vel.twist.linear.x = linear_vel;
@@ -334,7 +306,7 @@ void RLController::rotateToHeading(
   const double & angle_to_path, const geometry_msgs::msg::Twist & curr_speed)
 {
   // Rotate in place using max angular velocity / acceleration possible
-  linear_vel = 0.0;
+  linear_vel = max(curr_speed.linear.x - 0.4, 0.0);
   const double sign = angle_to_path > 0.0 ? 1.0 : -1.0;
   angular_vel = sign * rotate_to_heading_angular_vel_;
 
@@ -568,8 +540,19 @@ nav_msgs::msg::Path RLController::transformGlobalPlan(
   }
   // RCLCPP_INFO(logger_, "transformed plan length: %d", transformed_plan.poses.size());
   // RCLCPP_INFO(logger_, "transformed plan last point norm: %f", std::hypot(transformed_plan.poses.back().pose.position.x, transformed_plan.poses.back().pose.position.y));
-
   return transformed_plan;
+}
+double RLController::getPathLength(const nav_msgs::msg::Path & path){
+  // for(const auto & posestamped: path.poses){
+  // std::hypot(rl_carrot_pose.pose.position.x, rl_carrot_pose.pose.position.y);
+  double result = 0;
+  for(long unsigned int i = 1; i < path.poses.size(); i++){
+    auto x = path.poses[i].pose.position.x - path.poses[i-1].pose.position.x;
+    auto y = path.poses[i].pose.position.y - path.poses[i-1].pose.position.y;
+    result += std::hypot(x, y);
+  }
+  // RCLCPP_INFO(logger_, "path length: %f", result);
+  return result;
 }
 
 bool RLController::transformPose(

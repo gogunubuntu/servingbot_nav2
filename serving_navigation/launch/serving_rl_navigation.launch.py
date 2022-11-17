@@ -33,9 +33,6 @@ def generate_launch_description():
         ),
     )
     nav2_bringup_launch_dir = os.path.join(get_package_share_directory("nav2_bringup"), "launch")
-    four_cam_directly_launch_dir = os.path.join(get_package_share_directory("usb_camera_driver"), "launch")
-
-    rviz_config_dir = os.path.join(get_package_share_directory("serving_navigation"), "rviz2", "carter_navigation.rviz")
 
     return LaunchDescription(
         [
@@ -47,16 +44,9 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "use_sim_time", default_value="true", description="Use simulation (Omniverse Isaac Sim) clock if true"
             ),
-            # IncludeLaunchDescription(
-            #     PythonLaunchDescriptionSource(os.path.join(nav2_bringup_launch_dir, "rviz_launch.py")),
-            #     launch_arguments={"namespace": "", "use_namespace": "False", "rviz_config": rviz_config_dir}.items(),
-            # ),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource([nav2_bringup_launch_dir, "/bringup_norecovery_launch.py"]),
                 launch_arguments={"map": map_dir, "use_sim_time": use_sim_time, "params_file": param_dir}.items(),
-            ),
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource([four_cam_directly_launch_dir, "/4cam_directly.launch.py"])
             ),
         ]
     )

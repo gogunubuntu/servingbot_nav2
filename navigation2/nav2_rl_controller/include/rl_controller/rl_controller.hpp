@@ -199,9 +199,9 @@ protected:
    * @param pose_cost cost at this pose
    */
   void applyConstraints(
-    const double & dist_error, const double & lookahead_dist,
-    const double & curvature, const geometry_msgs::msg::Twist & speed,
-    const double & pose_cost, double & linear_vel);
+      const double &dist_error, const double &lookahead_dist,
+      const double &curvature, const geometry_msgs::msg::Twist &speed,
+      const double &pose_cost, double &linear_vel);
 
   /**
    * @brief Get lookahead point
@@ -211,12 +211,19 @@ protected:
    */
   geometry_msgs::msg::PoseStamped getLookAheadPoint(const double &, const nav_msgs::msg::Path &);
 
-  std::shared_ptr<tf2_ros::Buffer> tf_;
-  std::string plugin_name_;
-  std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros_;
-  rclcpp_lifecycle::LifecycleNode::SharedPtr node_;
-  nav2_costmap_2d::Costmap2D * costmap_;
-  rclcpp::Logger logger_ {rclcpp::get_logger("RLController")};
+    std::shared_ptr<tf2_ros::Buffer> tf_;
+    std::string plugin_name_;
+    std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros_;
+    rclcpp_lifecycle::LifecycleNode::SharedPtr node_;
+    nav2_costmap_2d::Costmap2D *costmap_;
+    rclcpp::Logger logger_{rclcpp::get_logger("RLController")};
+
+  /**
+   * @brief Get plan's length
+   * @param path Current global path
+   * @return path's length
+   */
+  double getPathLength(const nav_msgs::msg::Path & path);
 
   double desired_linear_vel_;
   double lookahead_dist_;
@@ -242,6 +249,7 @@ protected:
   double max_angular_accel_;
   double rotate_to_heading_min_angle_;
   double goal_dist_tol_;
+  double path_length_;
 
   nav_msgs::msg::Path global_plan_;
   std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Path>> global_path_pub_;
