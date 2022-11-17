@@ -162,6 +162,17 @@ protected:
     const double & angle_to_path, const geometry_msgs::msg::Twist & curr_speed);
 
   /**
+   * @brief Create a smooth and kinematically smoothed rotation command
+   * @param linear_vel linear velocity
+   * @param angular_vel angular velocity
+   * @param angle_to_path Angle of robot output relatie to carrot marker
+   * @param curr_speed the current robot speed
+   * @param saturation_vel limit value of linear acceleration
+   */
+  void rotateToHeadingWithSaturation(double & linear_vel, double & angular_vel,
+    const double & angle_to_path, const geometry_msgs::msg::Twist & curr_speed, const double & saturation_vel);
+
+  /**
    * @brief Whether collision is imminent
    * @param robot_pose Pose of robot
    * @param carrot_pose Pose of carrot
@@ -228,6 +239,7 @@ protected:
   double desired_linear_vel_;
   double lookahead_dist_;
   double rl_lookahead_dist_;
+  bool rl_flag_;
   double rotate_to_heading_angular_vel_;
   double max_lookahead_dist_;
   double min_lookahead_dist_;

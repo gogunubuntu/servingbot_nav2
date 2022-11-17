@@ -246,36 +246,58 @@ geometry_msgs::msg::TwistStamped RLController::computeVelocityCommands(
 
   carrot_pub_->publish(createCarrotMsg(carrot_pose));
 
-  double linear_vel, angular_vel; 
-
+  double linear_vel, angular_vel;
+  const double carrot_dist2 =
+      (carrot_pose.pose.position.x * carrot_pose.pose.position.x) +
+      (carrot_pose.pose.position.y * carrot_pose.pose.position.y);
+  double curvature = 0.0;
+  if (carrot_dist2 > 0.001)
+  {
+    curvature = 2.0 * carrot_pose.pose.position.y / carrot_dist2;
+  }
   linear_vel = desired_linear_vel_;
 
   double angle_to_heading;
-  
-  if (shouldRotateToGoalHeading(carrot_pose)) {
-    double angle_to_goal = tf2::getYaw(transformed_plan.poses.back().pose.orientation);
-    rotateToHeading(linear_vel, angular_vel, angle_to_goal, speed);
-    RCLCPP_INFO(logger_, "compute vel from pure pursuit controller");
-  } else if (shouldRotateToPath(carrot_pose, angle_to_heading)) {
-    rotateToHeading(linear_vel, angular_vel, angle_to_heading, speed);
-    RCLCPP_INFO(logger_, "compute vel from pure pursuit controller");
-  } else {
-    auto request = std::make_shared<rl_controller_msgs::srv::CalcRlVel::Request>();
-    request->dist2lookahead = std::hypot(rl_carrot_pose.pose.position.x, rl_carrot_pose.pose.position.y);
-    request->dir2lookahead = atan2(rl_carrot_pose.pose.position.y, rl_carrot_pose.pose.position.x);
-    request->robot_v = speed.linear.x;
-    request->robot_w = speed.angular.z;
-    request->path_length = path_length_;
-    auto result = calc_rl_vel_cli_->async_send_request(request);
-    RCLCPP_INFO(logger_, "compute vel from DRL controller");
-    while (true){
-      if (result.get()->success == true) {
-        linear_vel = result.get()->v;
-        angular_vel = result.get()->w;
-        break;
-      }
+  auto request = std::make_shared<rl_controller_msgs::srv::CalcRlVel::Request>();
+  request->dist2lookahead = std::hypot(rl_carrot_pose.pose.position.x, rl_carrot_pose.pose.position.y);
+  request->dir2lookahead = atan2(rl_carrot_pose.pose.position.y, rl_carrot_pose.pose.position.x);
+  request->robot_v = speed.linear.x;
+  request->robot_w = speed.angular.z;
+  request->path_length = path_length_;
+  auto result = calc_rl_vel_cli_->async_send_request(request);
+  while (true){
+    if (result.get()->success == true) {
+      linear_vel = result.get()->v;
+      angular_vel = result.get()->w;
+      rl_flag_ = result.get()->rl_flag && (speed.linear.x > 0.1);
+      break;
     }
   }
+  if (rl_flag_) RCLCPP_INFO(logger_, "True");
+  else RCLCPP_INFO(logger_, "False");
+
+  if (shouldRotateToGoalHeading(carrot_pose)) 
+  {
+    double angle_to_goal = tf2::getYaw(transformed_plan.poses.back().pose.orientation);
+    rotateToHeadingWithSaturation(linear_vel, angular_vel, angle_to_goal, speed, 0.4);
+    RCLCPP_INFO(logger_, "rotate to goal");
+  } else if (shouldRotateToPath(carrot_pose, angle_to_heading) && !rl_flag_)
+  {
+    rotateToHeadingWithSaturation(linear_vel, angular_vel, angle_to_heading, speed, 0.2);
+    RCLCPP_INFO(logger_, "rotate to path");
+  }
+  else if (!rl_flag_ || path_length_ < 1.0){
+    applyConstraints(
+        fabs(lookahead_dist - sqrt(carrot_dist2)),
+        lookahead_dist, curvature, speed,
+        costAtPose(pose.pose.position.x, pose.pose.position.y), linear_vel);
+
+    // Apply curvature to angular velocity after constraining linear velocity
+    angular_vel = linear_vel * curvature;
+    RCLCPP_INFO(logger_, "apply constraints");
+  }
+  else RCLCPP_INFO(logger_, "compute vel from DRL controller");
+
   geometry_msgs::msg::TwistStamped cmd_vel;
   cmd_vel.header = pose.header;
   cmd_vel.twist.linear.x = linear_vel;
@@ -306,7 +328,22 @@ void RLController::rotateToHeading(
   const double & angle_to_path, const geometry_msgs::msg::Twist & curr_speed)
 {
   // Rotate in place using max angular velocity / acceleration possible
-  linear_vel = max(curr_speed.linear.x - 0.4, 0.0);
+  linear_vel = 0;
+  const double sign = angle_to_path > 0.0 ? 1.0 : -1.0;
+  angular_vel = sign * rotate_to_heading_angular_vel_;
+
+  const double & dt = control_duration_;
+  const double min_feasible_angular_speed = curr_speed.angular.z - max_angular_accel_ * dt;
+  const double max_feasible_angular_speed = curr_speed.angular.z + max_angular_accel_ * dt;
+  angular_vel = clamp(angular_vel, min_feasible_angular_speed, max_feasible_angular_speed);
+}
+
+void RLController::rotateToHeadingWithSaturation(
+  double & linear_vel, double & angular_vel,
+  const double & angle_to_path, const geometry_msgs::msg::Twist & curr_speed, const double & saturation_vel)
+{
+  // Rotate in place using max angular velocity / acceleration possible
+  linear_vel = max(curr_speed.linear.x - saturation_vel, 0.0);
   const double sign = angle_to_path > 0.0 ? 1.0 : -1.0;
   angular_vel = sign * rotate_to_heading_angular_vel_;
 

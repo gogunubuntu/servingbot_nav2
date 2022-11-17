@@ -6,4 +6,5 @@ float64 path_length
 ---
 float64 v
 float64 w
+bool rl_flag
 bool success
