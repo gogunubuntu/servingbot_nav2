@@ -269,7 +269,9 @@ geometry_msgs::msg::TwistStamped RLController::computeVelocityCommands(
     if (result.get()->success == true) {
       linear_vel = result.get()->v;
       angular_vel = result.get()->w;
-      rl_flag_ = result.get()->rl_flag && (speed.linear.x > 0.1);
+      rl_flag_ = result.get()->rl_flag;
+
+      RCLCPP_INFO(logger_, "%lf", speed.linear.x);
       break;
     }
   }
@@ -280,10 +282,13 @@ geometry_msgs::msg::TwistStamped RLController::computeVelocityCommands(
   {
     double angle_to_goal = tf2::getYaw(transformed_plan.poses.back().pose.orientation);
     rotateToHeadingWithSaturation(linear_vel, angular_vel, angle_to_goal, speed, 0.4);
+    // rotateToHeading(linear_vel, angular_vel, angle_to_goal, speed);
     RCLCPP_INFO(logger_, "rotate to goal");
-  } else if (shouldRotateToPath(carrot_pose, angle_to_heading) && !rl_flag_)
+  } 
+  else if (shouldRotateToPath(carrot_pose, angle_to_heading) && !rl_flag_)
   {
     rotateToHeadingWithSaturation(linear_vel, angular_vel, angle_to_heading, speed, 0.2);
+    // rotateToHeading(linear_vel, angular_vel, angle_to_heading, speed);
     RCLCPP_INFO(logger_, "rotate to path");
   }
   else if (!rl_flag_ || path_length_ < 1.0){
