@@ -265,21 +265,24 @@ geometry_msgs::msg::TwistStamped RLController::computeVelocityCommands(
   request->robot_w = speed.angular.z;
   request->path_length = path_length_;
   auto result = calc_rl_vel_cli_->async_send_request(request);
+  double rl_v, rl_w;
+  bool classical_flag = false;
+
   while (true){
     if (result.get()->success == true) {
-      linear_vel = result.get()->v;
-      angular_vel = result.get()->w;
+      rl_v = result.get()->v;
+      rl_w = result.get()->w;
       rl_flag_ = result.get()->rl_flag;
-
-      RCLCPP_INFO(logger_, "%lf", speed.linear.x);
+      // RCLCPP_INFO(logger_, "%lf", speed.linear.x);
       break;
     }
   }
-  if (rl_flag_) RCLCPP_INFO(logger_, "True");
-  else RCLCPP_INFO(logger_, "False");
+  // if (rl_flag_) RCLCPP_INFO(logger_, "True");
+  // else RCLCPP_INFO(logger_, "False");
 
   if (shouldRotateToGoalHeading(carrot_pose)) 
   {
+    classical_flag = true;
     double angle_to_goal = tf2::getYaw(transformed_plan.poses.back().pose.orientation);
     rotateToHeadingWithSaturation(linear_vel, angular_vel, angle_to_goal, speed, 0.4);
     // rotateToHeading(linear_vel, angular_vel, angle_to_goal, speed);
@@ -287,11 +290,13 @@ geometry_msgs::msg::TwistStamped RLController::computeVelocityCommands(
   } 
   else if (shouldRotateToPath(carrot_pose, angle_to_heading) && !rl_flag_)
   {
+    classical_flag = true;
     rotateToHeadingWithSaturation(linear_vel, angular_vel, angle_to_heading, speed, 0.2);
     // rotateToHeading(linear_vel, angular_vel, angle_to_heading, speed);
     RCLCPP_INFO(logger_, "rotate to path");
   }
   else if (!rl_flag_ || path_length_ < 1.0){
+    classical_flag = true;
     applyConstraints(
         fabs(lookahead_dist - sqrt(carrot_dist2)),
         lookahead_dist, curvature, speed,
@@ -305,10 +310,16 @@ geometry_msgs::msg::TwistStamped RLController::computeVelocityCommands(
 
   geometry_msgs::msg::TwistStamped cmd_vel;
   cmd_vel.header = pose.header;
-  cmd_vel.twist.linear.x = linear_vel;
-  cmd_vel.twist.angular.z = angular_vel;
-
+  if(classical_flag){
+    cmd_vel.twist.linear.x = linear_vel;
+    cmd_vel.twist.angular.z = angular_vel;
+  }
+  else{
+    cmd_vel.twist.linear.x = rl_v;
+    cmd_vel.twist.angular.z = rl_w;
+  }
   return cmd_vel;
+
   
 }
 
