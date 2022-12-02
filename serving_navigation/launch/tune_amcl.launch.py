@@ -22,14 +22,14 @@ def generate_launch_description():
     map_dir = LaunchConfiguration(
         "map",
         default=os.path.join(
-            get_package_share_directory("serving_navigation"), "maps", "map_f3.yaml"
+            get_package_share_directory("serving_navigation"), "maps", "map_f1.yaml"
         ),
     )
 
     param_dir = LaunchConfiguration(
         "params_file",
         default=os.path.join(
-            get_package_share_directory("serving_navigation"), "params", "servingbot_navigation_params.yaml"
+            get_package_share_directory("serving_navigation"), "params", "tune_amcl.yaml"
         ),
     )
 
